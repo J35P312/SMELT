@@ -12,8 +12,7 @@ my $te = $ARGV[0];
 #### USER DEFINED VARIABLES ##########################################################################################
 
 # MELT settings
-my $meltver = "2.0.2/bianca";
-my $MELT_HOME="/sw/apps/bioinfo/MELT/".$meltver;
+my $MELT_HOME="/sw/apps/bioinfo/MELT/2.0.2/bianca";
 our $meltjar="java -Xmx6G -jar $MELT_HOME/MELT.jar";
 our $te_zip=$MELT_HOME."/me_refs/1KGP_Hg19/".$te."_MELT.zip";
 our $genes_bed=$MELT_HOME."/add_bed_files/1KGP_Hg19/hg19.genes.bed";
