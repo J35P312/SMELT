@@ -6,7 +6,7 @@ params.step= false
 //main script
 if(params.help){
     println "SMELT: a Slurm wrapper for MELT"
-    println "Usage: nextflow smelt.nf --step <STEP> --out <working_dir> --input <input_dir> --te <TE_zip_path> --ref {reference_fasta} -c smelt.conf"
+    println "Usage: nextflow smelt.nf --step <STEP> --working_dir <working_dir> --input_dir <input_dir> --te <TE_zip_path> --ref {reference_fasta} -c smelt.conf"
     println "--step parameters"
     println "prep - run the MELT prep procedure on the bam files in the input_dir (step1)"
     println "indiv - run the indiv analysis on the extracted signals (step2)"
@@ -24,10 +24,11 @@ if(params.help){
     input_dir=file(params.input_dir)
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
-    bam_files=Channel.fromPath("${params.folder}/*.bam").map{
+    bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
-        ["${file(line).baseName}".replaceLast(/.bam/,""),file(line),line]
+        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),line]
     }
+
 
     process prep{
 
@@ -61,9 +62,9 @@ if(params.help){
     input_dir=file(params.input_dir)
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
-    bam_files=Channel.fromPath("${params.folder}/*.bam").map{
+    bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
-        ["${file(line).baseName}".replaceLast(/.bam/,""),file("${line}.disc"),file("${line}.disc.bai"),file("${line}.fq"),file(line)]
+        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),line]
     }
 
     process indiv{
@@ -129,7 +130,7 @@ if(params.help){
     input_dir=file(params.input_dir)
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
-    bam_files=Channel.fromPath("${params.folder}/*.bam").map{
+    bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
         ["${file(line).baseName}".replaceLast(/.bam/,""),file(line)]
     }
