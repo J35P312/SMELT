@@ -13,6 +13,7 @@ if(params.help){
     println "group  - run the group step of the MELT split in input_dir (step3)"
     println "genotype  - run the MELT split analysis on the extracted signals in input_dir (step4)"
     println "makevcf  - run the MELT split analysis on the extracted signals in input_dir (step5)"
+    println "single - run melt single on all vcf files in a folder"
     println ""
     println "note! do not change the working_dir and input dir inbetween the analysis steps!"
     println ""
@@ -26,7 +27,7 @@ if(params.help){
 
     bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
-        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),line]
+        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),file("${file(line)}.bai"),line]
     }
 
 
@@ -40,7 +41,7 @@ if(params.help){
         cpus 1
 
         input:
-            set ID, file(bam), bam_path from bam_files
+            set ID, file(bam), file(bai), bam_path from bam_files
 
         output:
             set "${bam.baseName}.bam.disc", "${bam.baseName}.bam.disc.bai", "${bam.baseName}.bam.fq" into prep_output 
@@ -48,11 +49,10 @@ if(params.help){
 
         script:
         """
-            samtools index ${bam}
             java -Xmx6G -jar ${params.melt} Preprocess ${bam} ${params.ref}
-            mkdir ${params.working_dir}
-            mkdir prep
-            ln -s ${bam_path} ${params.working_dir}/${bam.baseName}.bam
+            mkdir -p ${params.working_dir}/prep/
+            ln -s ${bam_path} ${params.working_dir}/prep/
+            ln -s ${bam_path}.bai ${params.working_dir}/prep/
         """
 
     }
@@ -62,9 +62,10 @@ if(params.help){
     input_dir=file(params.input_dir)
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
-    bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
+    bam_files=Channel.fromPath("${params.working_dir}/prep/*.bam").map{
         line ->
-        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),line]
+        ["${file(line).baseName}",file("${file(line)}.disc"),file("${file(line)}.disc.bai"),file("${file(line)}.fq"),file(line),file("${file(line)}.bai")]
+
     }
 
     process indiv{
@@ -76,7 +77,7 @@ if(params.help){
         cpus 1
 
         input:
-            set ID, file(disc_bam), file(disc_index), file(fq),file(bam) from bam_files
+            set ID, file(disc_bam), file(disc_index), file(fq), file(bam), file(bai) from bam_files
 
         output:
             file "*.final.sorted.bam" into final_sorted
@@ -89,14 +90,14 @@ if(params.help){
         script:
         """
             mkdir tmp_indiv_out
-            java -Xmx6G -jar ${params.melt} IndivAnalysis -l ${bam} -b {params.exclude} -h ${params.ref} -t ${params.te} -c ${params.cov} -r ${params.readlen} -w tmp_indiv_out
+            java -Xmx6G -jar ${params.melt} IndivAnalysis -l ${bam} -b ${params.exclude} -h ${params.ref} -t ${params.te} -c ${params.cov} -r ${params.readlen} -w tmp_indiv_out
             cp tmp_indiv_out/* .
         """
     }
 
 }else if (params.step == "group"){
 
-    input_dir=file(params.input_dir)
+    input_dir=file("${params.working_dir}/indiv")
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
     process group{
@@ -118,7 +119,7 @@ if(params.help){
 
         """
         mkdir Group
-        java -Xmx6G -jar ${params.melt} GroupAnalysis -h ${params.ref} -l ${input} -t ${params.te} -w Group -n ${params.genes} -r ${params.readlen}
+        java -Xmx6G -jar ${params.melt} GroupAnalysis -h ${params.ref} -l ${input_dir} -t ${params.te} -w Group -n ${params.genes} -r ${params.readlen}
         mv Group/* .
         rm -rf tmp
 
@@ -154,13 +155,13 @@ if(params.help){
         script:
         """
             mkdir genotype_dir
-            java -Xmx6G -jar ${params.melt} Genotype -h ${params.ref} -l ${bam} -t ${params.te} -w genotype_dir -p ${params.working_dir}/group/ -e ${insert_size}
+            java -Xmx6G -jar ${params.melt} Genotype -h ${params.ref} -l ${bam} -t ${params.te} -w genotype_dir -p ${params.working_dir}/group/ -e ${params.insert_size}
         """
 
     }
 }else if (params.step == "makevcf"){
 
-    input_dir=file(params.input_dir)
+    input_dir=file("${params.working_dir}/prep")
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
 
@@ -194,6 +195,35 @@ if(params.help){
         java -Xmx6G -jar ${params.melt} MakeVCF -h ${params.ref} -f tsv_list.txt -t ${params.te} -w ${params.working_dir}/genotype/ -p ${params.working_dir}/group -o vcf_output
         mv vcf_output/*vcf .
         """
+
+    }
+}else if (params.step == "single"){
+
+    input_dir=file(params.input_dir)
+    if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
+
+    bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
+        line ->
+        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),file("${file(line)}.bai"),line]
+    }
+
+
+
+    process single{
+       publishDir "${params.working_dir}/single", mode: 'copy', overwrite: true
+     
+       cpus 1
+
+       input:
+            set ID, file(bam), file(bai), bam_path from bam_files
+
+       output:
+             file "${bam.baseName}" into single_vcf_folder
+       
+       """
+       java -Xmx6G -jar ${params.melt}  Single -h ${params.ref} -b ${params.exclude} -l ${bam} -n ${params.genes} -t ${params.te} -c ${params.cov} -r ${params.readlen} -e ${params.insert_size} -w ${bam.baseName}
+       """
+
 
     }
 
