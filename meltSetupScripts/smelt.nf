@@ -86,6 +86,7 @@ if(params.help){
             file "*.hum_breaks.sorted.bam.bai" into hum_breaks_bai
             file "*.pulled.sorted.bam" into pulled_sorted
             file "*.pulled.sorted.bam.bai" into pulled_sorted_bai
+            file "*.tmp.bed" into temp_bed
 
         script:
         """
@@ -133,7 +134,7 @@ if(params.help){
 
     bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
-        ["${file(line).baseName}".replaceLast(/.bam/,""),file(line)]
+        ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),file("${file(line)}.bai"),line]
     }
 
     process genotype{
@@ -146,16 +147,17 @@ if(params.help){
         cpus 1
 
         input:
-            set ID, file(bam), bam_path from bam_files
+            set ID, file(bam),file(bai), bam_path from bam_files
 
         output:
-            file "*" into genotype_output 
+            file "*.tsv" into genotype_output 
 
 
         script:
         """
             mkdir genotype_dir
             java -Xmx6G -jar ${params.melt} Genotype -h ${params.ref} -l ${bam} -t ${params.te} -w genotype_dir -p ${params.working_dir}/group/ -e ${params.insert_size}
+            mv genotype_dir/*tsv .
         """
 
     }
@@ -164,19 +166,23 @@ if(params.help){
     input_dir=file("${params.working_dir}/prep")
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
+    genotype_dir=file("${params.working_dir}/genotype/")
+    if(!genotype_dir.exists()) exit 1, "Error: The input genotype directory was not found (did you run the genotype step?)"
 
+    group_dir=file("${params.working_dir}/group")
+    if(!group_dir.exists()) exit 1, "Error: The input genotype directory was not found (did you run the group step?)"
 
     process makevcf{
 
-        publishDir "${params.working_dir}/genotype", mode: 'copy', overwrite: true
+        publishDir "${params.working_dir}/", mode: 'copy', overwrite: true
         scratch true
         errorStrategy 'ignore'
-
 
         cpus 1
 
         input:
-            file input_dir
+            file genotype_dir
+            file group_dir
 
         output:
             file "*.vcf" into final_vcf 
@@ -186,13 +192,14 @@ if(params.help){
 
         """
         printf "" > tsv_list.txt
+
         for tsvfile in ${params.working_dir}/genotype/*.tsv
             do
-            printf "%s\n" $tsvfile  >> tsv_list.txt
+            printf "%s\n" \$tsvfile  >> tsv_list.txt
         done
 
         mkdir vcf_output
-        java -Xmx6G -jar ${params.melt} MakeVCF -h ${params.ref} -f tsv_list.txt -t ${params.te} -w ${params.working_dir}/genotype/ -p ${params.working_dir}/group -o vcf_output
+        java -Xmx6G -jar ${params.melt} MakeVCF -h ${params.ref} -f tsv_list.txt -t ${params.te} -w ${genotype_dir} -p ${group_dir} -o vcf_output
         mv vcf_output/*vcf .
         """
 
@@ -218,10 +225,11 @@ if(params.help){
             set ID, file(bam), file(bai), bam_path from bam_files
 
        output:
-             file "${bam.baseName}" into single_vcf_folder
+             file "${bam.baseName}.vcf" into single_vcf_folder
        
        """
        java -Xmx6G -jar ${params.melt}  Single -h ${params.ref} -b ${params.exclude} -l ${bam} -n ${params.genes} -t ${params.te} -c ${params.cov} -r ${params.readlen} -e ${params.insert_size} -w ${bam.baseName}
+       vcf-concat ${bam.baseName}/*.vcf | vcf-sort -c > ${bam.baseName}.vcf
        """
 
 
