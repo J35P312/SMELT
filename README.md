@@ -1,7 +1,6 @@
 # SMELT
 
-SMELT is a Slurm wrapper around MELT. SMELT has been tested on the UPPMAX bianca cluster. With some luck, it might work on your cluster aswell!
-
+SMELT is a nextflow wrapper around MELT.
 
 # Install
 
@@ -9,46 +8,40 @@ Download and install MELT:
 
 	http://melt.igs.umaryland.edu/manual.php
 
-Edit the variables  in the createMELTsplitSetup.pl script, these are found at lines 15-44.
+Then install nextflow:
 
-# Setup the output folder
+	https://www.nextflow.io/
 
-	0: create a folder were the output files are stored, and update the $wdir parameter in the createMELTsplitSetup.pl script:
-		mkdir path/working_dir
+Edit the path variables and settings in the config file:
 
-		and set : my $wdir = "path/working_dir"
+	nano smelt.conf
 
-	1: create a folder containing softlinks to each bam to analyse:
-		
-		mkdir path/working_dir/bam
+now you are ready to go!
 
-	now create the softlinks:
+#run melt split analysis
 
-		ln -s /your_bam_folder/*.ba* path/working_dir/bam
+The script is run once for each step:
 
-	2: create the 00_samples.txt file. This file contain the path to each bam file to analyse:
+	./nextflow smelt.nf -c smelt.conf --step prep --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
 
-		ls  path/working_dir/bam/*bam > path/working_dir/00_samples.txt
+	./nextflow smelt.nf -c smelt.conf --step indiv --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
 
-	3: run the createMELTsplitSetup.pl. This script will create the other scripts and folders
+	./nextflow smelt.nf -c smelt.conf --step group --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
+
+	./nextflow smelt.nf -c smelt.conf --step genotype --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
+
+	./nextflow smelt.nf -c smelt.conf --step makevcf --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
+
+the output will be stored in the --working_dir folder, and the script will analyse all bam files in the --input_dir folder. The --te file is the mobile-element zip. These commands needs to be run separately for each mobile element type.
+It is safest to select a separate working_dir for each mobile element type.
+
+# Run melt single analysis
 	
-		./createMELTsplitSetup.pl <TE>
+	./nextflow smelt.nf -c smelt.conf --step single --working_dir <absolute/path/to/output/folder/> --input_dir <absolute/path/to/folder/containing/bam_files> --te <transposable_element_path>
 
-	The script is run once for each <TE> type, such as ALU or LINE1
+the output will be stored in the --working_dir folder, and the script will analyse all bam files in the --input_dir folder. The --te file is either the mobile-element zip file or a text file containing absolute path
+to multiple such files (see the MELT documentation for more info) 
 
-
-		./createMELTsplitSetup.pl ALU
-
-		./createMELTsplitSetup.pl LINE1
-
-		./createMELTsplitSetup.pl SVA
-
-# Run the analysis
-
-	Run the runMeltSplitSbatch.sh script. The script is  run once for each TE type and step:
-
-		runMeltSplitSbatch.sh <STEP> <TE> <workDIR>
-	
 # Contributors
 
 	Diana Ekman
