@@ -25,11 +25,16 @@ if(params.help){
     input_dir=file(params.input_dir)
     if(!input_dir.exists()) exit 1, "Error: The input directory was not found"
 
+    tmp="mkdir -p ${params.working_dir}/prep".execute().text
     bam_files=Channel.fromPath("${params.input_dir}/*.bam").map{
         line ->
         ["${file(line).baseName}".replaceFirst(/.bam/,""),file(line),file("${file(line)}.bai"),line]
     }
-
+    Channel.fromPath("${params.input_dir}/*.bam").subscribe{
+        println it
+        "ln -s ${it} ${params.working_dir}/prep".execute().text
+        "ln -s ${it}.bai ${params.working_dir}/prep".execute().text
+    }
 
     process prep{
 
@@ -50,11 +55,7 @@ if(params.help){
         script:
         """
             java -Xmx6G -jar ${params.melt} Preprocess ${bam} ${params.ref}
-            mkdir -p ${params.working_dir}/prep/
-            ln -s ${bam_path} ${params.working_dir}/prep/
-            ln -s ${bam_path}.bai ${params.working_dir}/prep/
         """
-
     }
 
 }else if (params.step == "indiv"){
